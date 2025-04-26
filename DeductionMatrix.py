@@ -55,8 +55,44 @@ class PossibilityMatrix:
                         if h != holder and self.poss[card][h]:
                             self.poss[card][h] = False
                             changed = True
+
             # (2) If a holder has exactly n known cards and
-            #     all their open slots filled, eliminate rest (optional)
+            #     all their open slots filled, eliminate rest
+
+            # Calculate how many cards each holder definitely has
+            definite_cards = {h: [] for h in self.holders}
+            for card in ALL_CARDS:
+                holder = self.card_owner(card)
+                if holder:
+                    definite_cards[holder].append(card)
+
+            # Calculate how many cards each holder could possibly have
+            possible_cards = {h: [c for c in ALL_CARDS if self.poss[c][h]] for h in self.holders}
+
+            # For each player, determine how many cards they should have
+            # This is based on the game rules - cards are dealt evenly
+            player_holders = [h for h in self.holders if h != "ENVELOPE"]
+            cards_per_player = (len(ALL_CARDS) - 3) // len(player_holders)  # 3 cards in envelope
+
+            # If a player has exactly the right number of possible cards,
+            # and some are definite, then the rest must also be definite
+            for holder in player_holders:
+                if holder != self.me:  # Skip self (we already know our cards)
+                    if len(possible_cards[holder]) == cards_per_player and len(definite_cards[holder]) > 0:
+                        # All possible cards for this holder must be definite
+                        for card in possible_cards[holder]:
+                            if card not in definite_cards[holder]:
+                                self.set_holder(card, holder)
+                                changed = True
+
+            # If a player has exactly the right number of definite cards,
+            # eliminate all other possibilities
+            for holder in player_holders:
+                if len(definite_cards[holder]) == cards_per_player:
+                    for card in ALL_CARDS:
+                        if card not in definite_cards[holder] and self.poss[card][holder]:
+                            self.poss[card][holder] = False
+                            changed = True
 
     # ---------- envelope deduction ----------
     def envelope_complete(self):

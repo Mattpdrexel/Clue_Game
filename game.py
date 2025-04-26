@@ -9,6 +9,8 @@ from Room import Room
 from Constants import *
 from DeductionMatrix import PossibilityMatrix
 from BonusCard import BonusCard
+from SuggestionHistory import SuggestionHistory
+from DeductionViewer import DeductionViewer
 import visualization
 
 class ClueGame:
@@ -91,6 +93,9 @@ class ClueGame:
         self.current_player_idx = 0
         self.game_over = False
         self.winner = None
+
+        # Suggestion history
+        self.suggestion_history = SuggestionHistory()
 
         print("Setup complete ✅")
         print("Secret envelope (hidden to players):", self.solution)
@@ -339,6 +344,9 @@ class ClueGame:
 
         self.weapon_dict[weapon].move_to(room)
 
+        # Add the suggestion to the history
+        suggestion = self.suggestion_history.add_suggestion(player.player_id, suspect, weapon, room)
+
         # Check if any player can disprove the suggestion
         for i in range(len(self.players)):
             # Start with the player to the left
@@ -350,7 +358,28 @@ class ClueGame:
                 if revealed_card:
                     # Update the player's deduction matrix
                     self.logic_engines[player.player_id].set_holder(revealed_card, f"P{other_player.player_id}")
+
+                    # Record the refutation in the suggestion history
+                    suggestion.refute(other_player.player_id, revealed_card)
+
                     return other_player, revealed_card
+                else:
+                    # Record that this player couldn't refute the suggestion
+                    # This is valuable information for deduction
+                    cards_in_suggestion = [suspect, weapon, room]
+                    for card in cards_in_suggestion:
+                        self.logic_engines[player.player_id].eliminate(card, f"P{other_player.player_id}")
+
+        # If no one could refute, this is valuable information
+        # All cards in the suggestion might be in the envelope
+        cards_in_suggestion = [suspect, weapon, room]
+        for card in cards_in_suggestion:
+            # Check if this card is already known to be with a player
+            if not any(self.logic_engines[player.player_id].poss[card][f"P{p.player_id}"] 
+                      for p in self.players if p.player_id != player.player_id and not p.eliminated):
+                # If not, it might be in the envelope
+                # We don't set it definitively because one of the cards might be in the suggester's hand
+                pass
 
         return None, None
 
@@ -465,6 +494,15 @@ class ClueGame:
         # Call the visualization module's function
         self.board_image_counter = visualization.generate_board_image_sequence(self, self.board_image_counter)
 
+    def display_suggestion_history(self):
+        """Display the history of suggestions made during the game."""
+        print(self.suggestion_history)
+
+    def display_deduction_matrix(self, player):
+        """Display a player's deduction matrix."""
+        matrix = self.logic_engines[player.player_id]
+        DeductionViewer.display_matrix(matrix, player.player_id)
+
     def next_turn(self):
         """Advance to the next player's turn"""
         self.current_player_idx = (self.current_player_idx + 1) % len(self.players)
@@ -509,6 +547,21 @@ class ClueGame:
             if stay_in_room:
                 # Skip the movement phase
                 print(f"Staying in the {room_name}")
+
+                # Offer to view deduction information
+                view_deductions = input("View deduction information? (y/n): ").lower() == 'y'
+                if view_deductions:
+                    # Show options for what to view
+                    print("\nDeduction Options:")
+                    print("1. View suggestion history")
+                    print("2. View your deduction matrix")
+                    print("3. Back to game")
+
+                    choice = input("Choose an option (1-3): ")
+                    if choice == "1":
+                        self.display_suggestion_history()
+                    elif choice == "2":
+                        self.display_deduction_matrix(player)
 
                 # Ask if the player wants to make a suggestion
                 make_suggestion = input("Make a suggestion? (y/n): ").lower() == 'y'
@@ -663,6 +716,21 @@ class ClueGame:
         if current_room:
             print(f"You are in the {room_name}")
 
+            # Offer to view deduction information
+            view_deductions = input("View deduction information? (y/n): ").lower() == 'y'
+            if view_deductions:
+                # Show options for what to view
+                print("\nDeduction Options:")
+                print("1. View suggestion history")
+                print("2. View your deduction matrix")
+                print("3. Back to game")
+
+                choice = input("Choose an option (1-3): ")
+                if choice == "1":
+                    self.display_suggestion_history()
+                elif choice == "2":
+                    self.display_deduction_matrix(player)
+
             # Ask if the player wants to make a suggestion
             make_suggestion = input("Make a suggestion? (y/n): ").lower() == 'y'
             if make_suggestion:
@@ -700,6 +768,21 @@ class ClueGame:
 
     def handle_accusation(self, player):
         """Handle the accusation phase of a turn"""
+        # Offer to view deduction information before making an accusation
+        view_deductions = input("View deduction information before deciding on accusation? (y/n): ").lower() == 'y'
+        if view_deductions:
+            # Show options for what to view
+            print("\nDeduction Options:")
+            print("1. View suggestion history")
+            print("2. View your deduction matrix")
+            print("3. Back to game")
+
+            choice = input("Choose an option (1-3): ")
+            if choice == "1":
+                self.display_suggestion_history()
+            elif choice == "2":
+                self.display_deduction_matrix(player)
+
         # Ask if the player wants to make an accusation
         make_accusation = input("Make an accusation? (y/n): ").lower() == 'y'
         if make_accusation:

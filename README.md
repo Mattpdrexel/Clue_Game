@@ -78,13 +78,46 @@ This project implements a digital version of the classic murder mystery board ga
   - Players can enter coordinates directly or choose from a list of valid moves
   - Coordinate validation ensures that only valid moves are accepted
 
+## Deduction System
+
+The game includes a sophisticated deduction system that helps players solve the murder mystery:
+
+### Suggestion History
+
+- All suggestions made during the game are tracked in a suggestion history
+- For each suggestion, the system records:
+  - Who made the suggestion
+  - What was suggested (suspect, weapon, room)
+  - Whether it was refuted and by whom
+  - What card was shown (to the suggester only)
+- Players can view the suggestion history during their turn
+
+### Deduction Matrix
+
+- Each player has a deduction matrix that tracks what they know about card ownership
+- The matrix shows which cards could be with which players or in the envelope
+- The system automatically updates the matrix based on:
+  - Cards in the player's hand
+  - Cards revealed during suggestions
+  - Logical deductions (e.g., if a player couldn't refute a suggestion)
+- Players can view their deduction matrix during their turn
+- The system can deduce the solution if enough information is gathered
+
+### Making Deductions
+
+- When a player makes a suggestion, other players must reveal a matching card if they have one
+- When a player can't refute a suggestion, this information is recorded in the deduction matrix
+- The system uses advanced logic to make deductions:
+  - If a card has only one possible holder, it must be with that holder
+  - If a player has exactly the right number of cards and some are known, the rest can be deduced
+  - If a player has all their cards accounted for, they can't have any other cards
+
 ## Future Improvements
 
 - Add a graphical user interface
 - Implement AI players
 - Add network support for multiplayer
 - Add more types of bonus cards
-- Implement a notes sheet interface for players to track their deductions
 - Add a visual grid overlay for coordinate selection
 - Implement pathfinding visualization for valid moves
 
