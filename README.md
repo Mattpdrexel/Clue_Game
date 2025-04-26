@@ -38,7 +38,6 @@ This project implements a digital version of the classic murder mystery board ga
 
 ## Project Structure
 
-- `main.py`: Sets up the game state
 - `game.py`: Implements the game loop and mechanics
 - `Board.py`: Defines the mansion board and character positions
 - `Character.py`: Defines the character class and character dictionary
@@ -47,6 +46,7 @@ This project implements a digital version of the classic murder mystery board ga
 - `Player.py`: Defines the player class and bonus card handling
 - `Constants.py`: Defines game constants like character names, weapon names, room names, and secret passages
 - `DeductionMatrix.py`: Implements the logic engine for deducing the solution
+- `DeductionViewer.py`: Keep track of information accumulated for players
 - `BonusCard.py`: Defines the bonus card class and its effects
 
 ## How to Play
@@ -70,6 +70,13 @@ This project implements a digital version of the classic murder mystery board ga
 ## Implementation Details
 
 - The game board is loaded from an Excel file (`mansion_board_layout.xlsx`)
+  - I created this Excel sheet by hand, modeling it after the classic Clue board game layout ()
+  - Each cell in the spreadsheet represents a space on the board with specific values:
+    - Room names for spaces inside rooms
+    - Room names with "_e" suffix for room entrances
+    - "?" for bonus card spaces
+    - Empty cells for corridors
+  - The board design was inspired by the grid layout from the classic Clue board game: https://www.pinterest.com/pin/clue-board-game-classic-detective-game--10344274143620595/
 - Characters and weapons are moved around the board as players make suggestions
 - Players can deduce the solution using the information from revealed cards
 - The game supports 3 players by default, but can be configured for different numbers
@@ -80,7 +87,7 @@ This project implements a digital version of the classic murder mystery board ga
 
 ## Deduction System
 
-The game includes a sophisticated deduction system that helps players solve the murder mystery:
+The game includes a deduction system that helps players solve the murder mystery:
 
 ### Suggestion History
 
@@ -122,6 +129,7 @@ The game includes a sophisticated deduction system that helps players solve the 
 - Implement pathfinding visualization for valid moves
 
 ## References
-- Played some of SNES simulation of clue to get a sense of how game works (never played the board game):
+- Played some of SNES simulation of clue to get a sense of how game works (never played the board game before):
 - https://funkypotato.com/clue-online-cluedo/
-- 
+- Image used for clue board:
+- https://www.pinterest.com/pin/clue-board-game-classic-detective-game--10344274143620595/
