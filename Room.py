@@ -1,4 +1,3 @@
-from Constants import *
 
 class RoomEntrance:
     def __init__(self, room_name, row, column):

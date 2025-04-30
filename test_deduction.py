@@ -2,7 +2,6 @@ import unittest
 from game import ClueGame
 from Constants import SUSPECTS, WEAPONS, ROOMS
 from DeductionMatrix import PossibilityMatrix
-from SuggestionHistory import SuggestionHistory
 
 class TestDeductionSystem(unittest.TestCase):
     def setUp(self):

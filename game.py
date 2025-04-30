@@ -100,6 +100,11 @@ class ClueGame:
         print("Setup complete ✅")
         print("Secret envelope (hidden to players):", self.solution)
 
+        # Display each player's starting hand
+        for player in self.players:
+            print(f"\n{player.character.name}'s starting hand:")
+            self.display_player_hand(player)
+
     def roll_dice(self):
         """Simulate rolling a six-sided die"""
         return random.randint(1, 6)
@@ -498,6 +503,25 @@ class ClueGame:
         """Display the history of suggestions made during the game."""
         print(self.suggestion_history)
 
+    def display_player_hand(self, player):
+        """Display the cards in a player's hand."""
+        if not player.hand:
+            print("No cards in hand.")
+            return
+
+        # Group cards by type
+        suspects = [card for card in player.hand if card in SUSPECTS]
+        weapons = [card for card in player.hand if card in WEAPONS]
+        rooms = [card for card in player.hand if card in ROOMS]
+
+        # Display cards by type
+        if suspects:
+            print("Suspects:", ", ".join(suspects))
+        if weapons:
+            print("Weapons:", ", ".join(weapons))
+        if rooms:
+            print("Rooms:", ", ".join(rooms))
+
     def display_deduction_matrix(self, player):
         """Display a player's deduction matrix."""
         matrix = self.logic_engines[player.player_id]
@@ -555,13 +579,16 @@ class ClueGame:
                     print("\nDeduction Options:")
                     print("1. View suggestion history")
                     print("2. View your deduction matrix")
-                    print("3. Back to game")
+                    print("3. View your cards in hand")
+                    print("4. Back to game")
 
-                    choice = input("Choose an option (1-3): ")
+                    choice = input("Choose an option (1-4): ")
                     if choice == "1":
                         self.display_suggestion_history()
                     elif choice == "2":
                         self.display_deduction_matrix(player)
+                    elif choice == "3":
+                        self.display_player_hand(player)
 
                 # Ask if the player wants to make a suggestion
                 make_suggestion = input("Make a suggestion? (y/n): ").lower() == 'y'
@@ -723,13 +750,16 @@ class ClueGame:
                 print("\nDeduction Options:")
                 print("1. View suggestion history")
                 print("2. View your deduction matrix")
-                print("3. Back to game")
+                print("3. View your cards in hand")
+                print("4. Back to game")
 
-                choice = input("Choose an option (1-3): ")
+                choice = input("Choose an option (1-4): ")
                 if choice == "1":
                     self.display_suggestion_history()
                 elif choice == "2":
                     self.display_deduction_matrix(player)
+                elif choice == "3":
+                    self.display_player_hand(player)
 
             # Ask if the player wants to make a suggestion
             make_suggestion = input("Make a suggestion? (y/n): ").lower() == 'y'
@@ -775,13 +805,16 @@ class ClueGame:
             print("\nDeduction Options:")
             print("1. View suggestion history")
             print("2. View your deduction matrix")
-            print("3. Back to game")
+            print("3. View your cards in hand")
+            print("4. Back to game")
 
-            choice = input("Choose an option (1-3): ")
+            choice = input("Choose an option (1-4): ")
             if choice == "1":
                 self.display_suggestion_history()
             elif choice == "2":
                 self.display_deduction_matrix(player)
+            elif choice == "3":
+                self.display_player_hand(player)
 
         # Ask if the player wants to make an accusation
         make_accusation = input("Make an accusation? (y/n): ").lower() == 'y'

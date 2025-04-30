@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 from Room import Room
-from Character import character_dict
 from Constants import character_name_list, room_name_list, weapon_name_list
 
 # Define colors for different elements - using brighter, more distinguished colors

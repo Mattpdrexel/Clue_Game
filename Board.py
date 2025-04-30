@@ -1,5 +1,4 @@
-from Constants import room_name_list, character_name_list
-from Character import character_dict
+from Constants import room_name_list
 from Room import Room
 
 class CharacterBoard:
