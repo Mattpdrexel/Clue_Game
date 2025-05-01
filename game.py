@@ -1,6 +1,7 @@
 import random
 import pandas as pd
 import os
+import csv
 from Board import MansionBoard, CharacterBoard
 from Character import character_dict
 from Weapon import Weapon
@@ -14,11 +15,13 @@ from DeductionViewer import DeductionViewer
 import visualization
 
 class ClueGame:
-    def __init__(self, num_players=3):
+    def __init__(self, num_players=3, use_ai_players=False, log_to_csv=False, enable_visualization=True, ai_class=None, num_human=None):
         # ---------- load boards ----------
         self.mansion_layout = pd.read_excel("mansion_board_layout.xlsx", header=None)
         self.mansion_board = MansionBoard(self.mansion_layout)
         self.char_board = CharacterBoard(self.mansion_board.rows, self.mansion_board.cols)
+        self.turn_counter = 0
+        self.max_turns = None
 
         # Board visualization symbols
         self.symbols = {
@@ -34,19 +37,46 @@ class ClueGame:
         # Counter for board image sequence
         self.board_image_counter = 0
 
-        # Clear board_images directory at game start
-        image_dir = "board_images"
-        if os.path.exists(image_dir):
-            for file in os.listdir(image_dir):
-                file_path = os.path.join(image_dir, file)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-            print(f"Cleared directory '{image_dir}' for board images")
+        # Visualization control flag
+        self.enable_visualization = enable_visualization
+
+        # Clear board_images directory at game start if visualization is enabled
+        if self.enable_visualization:
+            image_dir = "board_images"
+            if os.path.exists(image_dir):
+                for file in os.listdir(image_dir):
+                    file_path = os.path.join(image_dir, file)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                print(f"Cleared directory '{image_dir}' for board images")
+
+        # Game options
+        self.use_ai_players = use_ai_players or ai_class is not None or (num_human is not None and num_human == 0)
+        self.log_to_csv = log_to_csv
 
         # ---------- characters & players ----------
         self.players = []
-        for i, name in enumerate(SUSPECTS[:num_players]):  # Use specified number of players
-            self.players.append(Player(i, character_dict[name]))
+
+        # Handle num_human parameter (overrides num_players)
+        if num_human is not None:
+            num_players = num_human
+
+        # Ensure num_players is at least 3 (minimum required for a game)
+        num_players = max(3, num_players)
+
+        if self.use_ai_players:
+            # Use specified AI class if provided, otherwise use default AIPlayer
+            if ai_class is not None:
+                for i, name in enumerate(SUSPECTS[:num_players]):
+                    self.players.append(ai_class(i, character_dict[name]))
+            else:
+                # Import AIPlayer here to avoid circular imports
+                from AIPlayer import AIPlayer
+                for i, name in enumerate(SUSPECTS[:num_players]):
+                    self.players.append(AIPlayer(i, character_dict[name]))
+        else:
+            for i, name in enumerate(SUSPECTS[:num_players]):
+                self.players.append(Player(i, character_dict[name]))
 
         # place *all* 6 tokens around the centre (row 10,11 picked arbitrarily)
         self.centre_row, self.centre_col = 10, 11
@@ -81,7 +111,11 @@ class ClueGame:
         random.shuffle(deck)
 
         for idx, card in enumerate(deck):
-            self.players[idx % len(self.players)].add_card(card)
+            player = self.players[idx % len(self.players)]
+            player.add_card(card)
+            # Call observe_card if the player has this method
+            if hasattr(player, 'observe_card'):
+                player.observe_card(card)
 
         # ---------- build deduction matrices (one per player) ----------
         self.logic_engines = {
@@ -96,6 +130,32 @@ class ClueGame:
 
         # Suggestion history
         self.suggestion_history = SuggestionHistory()
+
+        # CSV logging setup
+        if log_to_csv:
+            self.game_log_file = "game_log.csv"
+            self.deduction_log_file = "deduction_log.csv"
+
+            # Initialize game log file
+            with open(self.game_log_file, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    'Turn', 'Player ID', 'Character', 'Position', 'Action', 
+                    'Target Room', 'Suggestion Suspect', 'Suggestion Weapon', 
+                    'Suggestion Room', 'Refuted By', 'Card Shown'
+                ])
+
+            # Initialize deduction log file
+            with open(self.deduction_log_file, 'w', newline='') as f:
+                writer = csv.writer(f)
+                header = ['Turn', 'Player ID', 'Character']
+
+                # Add columns for each card and holder combination
+                for card in ALL_CARDS:
+                    for holder in ['ENVELOPE'] + [f'P{i}' for i in range(num_players)]:
+                        header.append(f'{card}_{holder}')
+
+                writer.writerow(header)
 
         print("Setup complete ✅")
         print("Secret envelope (hidden to players):", self.solution)
@@ -323,6 +383,11 @@ class ClueGame:
         if isinstance(cell_type, Room):
             current_room = cell_type
 
+            # Additional safeguard: Prevent suggestions in the Clue room
+            if current_room.name == "Clue":
+                print("Error: Suggestions cannot be made in the Clue room.")
+                return None, None
+
             # Find an available cell in the room to place the suggested character
             found_cell = False
             for r in range(self.mansion_board.rows):
@@ -367,6 +432,10 @@ class ClueGame:
                     # Record the refutation in the suggestion history
                     suggestion.refute(other_player.player_id, revealed_card)
 
+                    # Call observe_card if the player has this method
+                    if hasattr(player, 'observe_card'):
+                        player.observe_card(revealed_card)
+
                     return other_player, revealed_card
                 else:
                     # Record that this player couldn't refute the suggestion
@@ -405,6 +474,9 @@ class ClueGame:
 
     def display_board(self):
         """Display the current state of the board using ASCII characters"""
+        if not hasattr(self, 'enable_visualization') or not self.enable_visualization:
+            return  # Skip visualization if disabled
+
         # Create a 2D grid to represent the board
         board_display = [[' ' for _ in range(self.mansion_board.cols)] for _ in range(self.mansion_board.rows)]
 
@@ -496,8 +568,10 @@ class ClueGame:
 
     def generate_board_image_sequence(self):
         """Generate a sequence of board images to show the game progression"""
-        # Call the visualization module's function
-        self.board_image_counter = visualization.generate_board_image_sequence(self, self.board_image_counter)
+        # Only generate images if visualization is enabled
+        if self.enable_visualization:
+            # Call the visualization module's function
+            self.board_image_counter = visualization.generate_board_image_sequence(self, self.board_image_counter)
 
     def display_suggestion_history(self):
         """Display the history of suggestions made during the game."""
@@ -591,7 +665,12 @@ class ClueGame:
                         self.display_player_hand(player)
 
                 # Ask if the player wants to make a suggestion
-                make_suggestion = input("Make a suggestion? (y/n): ").lower() == 'y'
+                # Only allow suggestions in main rooms, not the Clue room
+                if room_name == "Clue":
+                    print("You cannot make a suggestion in the Clue room.")
+                    make_suggestion = False
+                else:
+                    make_suggestion = input("Make a suggestion? (y/n): ").lower() == 'y'
                 if make_suggestion:
                     # Get the suggestion details
                     print("Suspects:", SUSPECTS)
@@ -609,6 +688,9 @@ class ClueGame:
                         print(f"{responder.character.name} showed you {card}")
                     else:
                         print("No one could disprove your suggestion!")
+
+                    # Set flag to force player to exit room next turn
+                    player.must_exit_next_turn = True
 
                 # Check for bonus cards
                 if player.bonus_cards:
@@ -786,6 +868,9 @@ class ClueGame:
                 else:
                     print("No one could disprove your suggestion!")
 
+                # Set flag to force player to exit room next turn
+                player.must_exit_next_turn = True
+
         # Handle accusation phase
         self.handle_accusation(player)
 
@@ -860,16 +945,320 @@ class ClueGame:
             else:
                 print("Wrong! You are eliminated from making accusations.")
 
-    def play_game(self):
-        """Play the game until it's over"""
-        print("\nStarting the game!")
+    def play_ai_turn(self, player):
+        """Play a turn for an AI player"""
+        if self.enable_visualization:
+            print(f"\n{player.character.name}'s turn (AI)")
+            self.display_board()  # Only display if visualization is enabled
 
-        # Display the initial board state
-        self.display_board()
+        # Log the game state if enabled
+        if self.log_to_csv:
+            self._log_game_state(player, "Start Turn")
 
+        # Check if player is in a room at the start of their turn
+        current_pos = player.character.position
+        cell_type = self.mansion_board.get_cell_type(current_pos[0], current_pos[1])
+        current_room = None
+
+        if isinstance(cell_type, Room):
+            current_room = cell_type
+            room_name = current_room.name
+            if self.enable_visualization:
+                print(f"AI is in the {room_name}")
+
+            # If the room has a secret passage, decide whether to use it
+            if current_room.secret_passage_to:
+                # AI logic: Use secret passage if it leads to a room we want to visit
+                use_passage = current_room.secret_passage_to == player.target_room
+                if use_passage:
+                    # Move to the connected room
+                    dest_room = self.mansion_board.room_dict[current_room.secret_passage_to]
+                    if dest_room.room_entrance_list:
+                        new_pos = (dest_room.room_entrance_list[0].row, dest_room.room_entrance_list[0].column)
+                        self.move_player(player, new_pos)
+                        if self.enable_visualization:
+                            print(f"AI moved to {current_room.secret_passage_to} via secret passage")
+                        current_room = dest_room
+                        room_name = current_room.name
+                    elif self.enable_visualization:
+                        print(f"Could not use secret passage (no entrances found in {current_room.secret_passage_to})")
+
+            # AI logic: Decide whether to stay in the room or roll and move
+            # Stay if we want to make a suggestion in this room and it's not the Clue room
+            stay_in_room = room_name != "Clue" and (player.target_room is None or room_name == player.target_room)
+            if stay_in_room:
+                # Skip the movement phase
+                if self.enable_visualization:
+                    print(f"AI staying in the {room_name}")
+
+                # AI logic: Make a suggestion in this room
+                # Double-check that we're not in the Clue room
+                if room_name == "Clue":
+                    if self.enable_visualization:
+                        print("AI cannot make a suggestion in the Clue room.")
+                    responder, card = None, None
+                else:
+                    suspect, weapon, room = player.choose_suggestion(room_name, self)
+                    if self.enable_visualization:
+                        print(f"AI suggests: {suspect} with {weapon} in {room_name}")
+
+                    # Make the suggestion
+                    responder, card = self.make_suggestion(player, suspect, weapon, room_name)
+
+                    # Update the board display after suggestion (characters and weapons moved)
+                    self.display_board()
+
+                    # Log the suggestion if enabled
+                    if self.log_to_csv:
+                        self._log_game_state(player, "Suggestion", 
+                                            suggestion_suspect=suspect, 
+                                            suggestion_weapon=weapon, 
+                                            suggestion_room=room_name,
+                                            refuted_by=responder.player_id if responder else None,
+                                            card_shown=card)
+
+                    if self.enable_visualization:
+                        if responder:
+                            print(f"{responder.character.name} showed {card}")
+                        else:
+                            print("No one could disprove the suggestion!")
+
+                # Set flag to force player to exit room next turn
+                player.must_exit_next_turn = True
+
+                # Skip to accusation phase
+                self.handle_ai_accusation(player)
+
+                # End the turn
+                if player.extra_turn:
+                    player.extra_turn = False
+                    if self.enable_visualization:
+                        print(f"{player.character.name} gets an extra turn!")
+                else:
+                    self.next_turn()
+                return
+
+        # Normal turn with dice roll
+        steps = self.roll_dice()
+        if self.enable_visualization:
+            print(f"AI rolled a {steps}")
+
+        # Get valid moves
+        valid_moves = self.get_valid_moves(player, steps)
+
+        # AI logic: Choose a move
+        new_position = player.choose_move(valid_moves, self)
+        if new_position:
+            # Move the player
+            self.move_player(player, new_position)
+            if self.enable_visualization:
+                print(f"AI moved to {new_position}")
+
+            # Log the move if enabled
+            if self.log_to_csv:
+                self._log_game_state(player, "Move", target_room=player.target_room)
+
+            # Update the board display after movement
+            self.display_board()
+
+            # Check if the player landed on a bonus card space
+            if self.mansion_board.is_bonus_card_space(new_position[0], new_position[1]) and self.enable_visualization:
+                print("AI landed on a bonus card space!")
+                # AI logic: Always draw a bonus card
+                bonus_card = BonusCard()
+                if self.enable_visualization:
+                    print(f"AI drew: {bonus_card}")
+
+                if bonus_card.immediate:
+                    # Play the card immediately
+                    result = bonus_card.play(self, player)
+                    if self.enable_visualization:
+                        print(result)
+
+                    if bonus_card.card_type == "Extra Turn":
+                        player.extra_turn = True
+                else:
+                    # Add to player's hand
+                    player.add_bonus_card(bonus_card)
+
+            # Check if the player is in a room or on a room entrance
+            cell_type = self.mansion_board.get_cell_type(new_position[0], new_position[1])
+            current_room = None
+
+            # Check if the player is on a room entrance
+            is_room_entrance = cell_type and hasattr(cell_type, 'room_name')
+            if is_room_entrance:
+                # If on a room entrance, get the room
+                room_name = cell_type.room_name
+                current_room = self.mansion_board.room_dict[room_name]
+            elif isinstance(cell_type, Room):
+                current_room = cell_type
+                room_name = current_room.name
+
+            # If the player is in a room or on a room entrance (and it's not the Clue room)
+            if current_room and room_name != "Clue":
+                if self.enable_visualization:
+                    print(f"AI is in the {room_name}")
+
+                # AI logic: Make a suggestion in this room
+                suspect, weapon, room = player.choose_suggestion(room_name, self)
+                if self.enable_visualization:
+                    print(f"AI suggests: {suspect} with {weapon} in {room_name}")
+
+                # Make the suggestion
+                responder, card = self.make_suggestion(player, suspect, weapon, room_name)
+
+                # Update the board display after suggestion (characters and weapons moved)
+                self.display_board()
+
+                # Log the suggestion if enabled
+                if self.log_to_csv:
+                    self._log_game_state(player, "Suggestion", 
+                                        suggestion_suspect=suspect, 
+                                        suggestion_weapon=weapon, 
+                                        suggestion_room=room_name,
+                                        refuted_by=responder.player_id if responder else None,
+                                        card_shown=card)
+
+                if self.enable_visualization:
+                    if responder:
+                        print(f"{responder.character.name} showed {card}")
+                    else:
+                        print("No one could disprove the suggestion!")
+
+                # Set flag to force player to exit room next turn
+                player.must_exit_next_turn = True
+
+        # Handle accusation phase
+        self.handle_ai_accusation(player)
+
+        # End the turn
+        if player.extra_turn:
+            player.extra_turn = False
+            if self.enable_visualization:
+                print(f"{player.character.name} gets an extra turn!")
+        else:
+            self.next_turn()
+
+    def handle_ai_accusation(self, player):
+        """Handle the accusation phase of a turn for an AI player"""
+        # AI logic: Decide whether to make an accusation
+        make_accusation = player.should_make_accusation(self)
+        if make_accusation:
+            # Check if player is in the center
+            is_in_center = (player.character.position[0] == self.centre_row and 
+                           player.character.position[1] == self.centre_col)
+
+            if not is_in_center:
+                # Move to center
+                self.move_player(player, (self.centre_row, self.centre_col))
+                if self.enable_visualization:
+                    print(f"AI moved to center at {self.centre_row}, {self.centre_col}")
+
+                # Update the board display after moving to center
+                self.display_board()
+
+            # AI logic: Choose an accusation
+            suspect, weapon, room = player.choose_accusation(self)
+            if self.enable_visualization:
+                print(f"AI accuses: {suspect} with {weapon} in {room}")
+
+            # Make the accusation
+            correct = self.make_accusation(player, suspect, weapon, room)
+
+            # Log the accusation if enabled
+            if self.log_to_csv:
+                self._log_game_state(player, "Accusation", 
+                                    suggestion_suspect=suspect, 
+                                    suggestion_weapon=weapon, 
+                                    suggestion_room=room,
+                                    refuted_by="Correct" if correct else "Incorrect")
+
+            if self.enable_visualization:
+                if correct:
+                    print("Correct! AI wins!")
+                else:
+                    print("Wrong! AI is eliminated from making accusations.")
+
+    def _log_game_state(self, player, action, target_room=None, suggestion_suspect=None, 
+                       suggestion_weapon=None, suggestion_room=None, refuted_by=None, card_shown=None):
+        """Log the current game state to CSV files"""
+        if not self.log_to_csv:
+            return
+
+        # Log game action
+        with open(self.game_log_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                len(player.game_state_log) + 1,  # Turn number
+                player.player_id,
+                player.character.name,
+                player.character.position,
+                action,
+                target_room,
+                suggestion_suspect,
+                suggestion_weapon,
+                suggestion_room,
+                refuted_by,
+                card_shown
+            ])
+
+        # Log deduction matrix state
+        matrix = self.logic_engines[player.player_id]
+        with open(self.deduction_log_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            row = [
+                len(player.game_state_log) + 1,  # Turn number
+                player.player_id,
+                player.character.name
+            ]
+
+            # Add values for each card and holder combination
+            for card in ALL_CARDS:
+                for holder in ['ENVELOPE'] + [f'P{i}' for i in range(len(self.players))]:
+                    row.append(1 if matrix.poss[card][holder] else 0)
+
+            writer.writerow(row)
+
+        # Also log to the player's internal state log
+        if hasattr(player, 'log_game_state'):
+            player.log_game_state(self)
+
+    def run(self, max_turns=None):
+        """Play the game until it's over or max_turns is reached"""
+        if self.enable_visualization:
+            print("\nStarting the game!")
+            # Display the initial board state
+            self.display_board()
+
+        self.turn_counter = 0
         while not self.game_over:
+            if max_turns is not None and self.turn_counter >= max_turns:
+                print(f"\nReached maximum turns ({max_turns}). Ending game.")
+                break
+
             current_player = self.players[self.current_player_idx]
-            self.play_turn(current_player)
+
+            # Track player positions if track_positions attribute exists
+            if hasattr(self, 'track_positions'):
+                # Get current room name or None
+                current_pos = current_player.character.position
+                cell_type = self.mansion_board.get_cell_type(current_pos[0], current_pos[1])
+                current_room = None
+
+                if isinstance(cell_type, Room):
+                    current_room = cell_type.name
+                elif cell_type and hasattr(cell_type, 'room_name'):
+                    current_room = cell_type.room_name
+
+                self.track_positions.append((current_player.player_id, current_room))
+
+            if self.use_ai_players:
+                self.play_ai_turn(current_player)
+            else:
+                self.play_turn(current_player)
+
+            self.turn_counter += 1
 
         if self.winner:
             print(f"\nGame over! {self.winner.character.name} wins!")
@@ -878,6 +1267,39 @@ class ClueGame:
             print(f"Suspect: {self.solution['suspect']}")
             print(f"Weapon: {self.solution['weapon']}")
             print(f"Room: {self.solution['room']}")
+
+    def play_game(self):
+        """Play the game until it's over (wrapper for run method)"""
+        self.run()
+
+    def play(self):
+        """Play the game until it's over (wrapper for run method)"""
+        self.run(self.max_turns)
+
+    def replace_all_players(self, player_class):
+        """Replace all players with instances of the given player class"""
+        new_players = []
+        for i, player in enumerate(self.players):
+            new_player = player_class(i, player.character)
+            # Copy the hand from the old player to the new player
+            for card in player.hand:
+                new_player.add_card(card)
+                # Call observe_card if the player has this method
+                if hasattr(new_player, 'observe_card'):
+                    new_player.observe_card(card)
+            new_players.append(new_player)
+
+        self.players = new_players
+
+        # Rebuild the logic engines for the new players
+        self.logic_engines = {
+            p.player_id: PossibilityMatrix(len(self.players), p.player_id, p.hand)
+            for p in self.players
+        }
+
+        # Update use_ai_players flag based on the player class
+        from AIPlayer import AIPlayer
+        self.use_ai_players = issubclass(player_class, AIPlayer) or player_class.__name__ == "SimpleAIPlayer"
 
 if __name__ == "__main__":
     game = ClueGame()

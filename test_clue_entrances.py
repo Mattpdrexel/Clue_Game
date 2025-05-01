@@ -1,8 +1,8 @@
 from game import ClueGame
 from Room import Room
 
-# Create a game instance
-game = ClueGame()
+# Create a game instance with visualization disabled for testing
+game = ClueGame(enable_visualization=False)
 
 # Get the Clue room
 clue_room = game.mansion_board.room_dict["Clue"]

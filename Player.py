@@ -9,6 +9,7 @@ class Player:
         self.notes_sheet = {}              # optional: deduction data
         self.bonus_cards = []              # bonus cards the player has drawn
         self.extra_turn  = False           # whether the player gets an extra turn
+        self.must_exit_next_turn = False   # whether the player must exit a room next turn
 
     def add_card(self, card):
         self.hand.append(card)

@@ -5,7 +5,7 @@ from Room import Room
 
 class TestClueGame(unittest.TestCase):
     def setUp(self):
-        self.game = ClueGame(num_players=3)
+        self.game = ClueGame(num_players=3, enable_visualization=False)
 
     def test_game_initialization(self):
         # Test that the game is initialized correctly
